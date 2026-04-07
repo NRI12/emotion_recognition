@@ -6,3 +6,4 @@ persistent_workers: true   # keep workers alive between epochs (avoids re-spawn 
 patience: 10        # EarlyStopping patience (epochs)
 weight_decay: 1.0e-4
 extraction_workers: 4  # parallel workers for classical feature extraction (ProcessPoolExecutor)
+model_artifacts_dir: "artifacts/models"  # where classical model .pkl files are saved

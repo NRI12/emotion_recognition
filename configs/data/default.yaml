@@ -21,7 +21,16 @@ stratify: true
 # ---------------------------------------------------------------------------
 # Set auto_download=true to download the dataset automatically when csv_path
 # does not exist.  The archive is cached under raw_dir so re-runs are instant.
-auto_download: false
+auto_download: true
 download_url: "https://drive.google.com/file/d/1q3mRjJGw-ZOoc_vLGVijmiIWjCjQIqp4/view"
 raw_dir: "data/raw"
 extract_to: "data"
+
+# ---------------------------------------------------------------------------
+# Feature cache
+# ---------------------------------------------------------------------------
+# Extracted features are persisted to feature_cache_dir so they are never
+# recomputed on subsequent runs (or across epochs for the DL pipeline).
+# Set use_feature_cache=false to disable (e.g. for debugging).
+use_feature_cache: true
+feature_cache_dir: "data/processed"

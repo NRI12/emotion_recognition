@@ -64,7 +64,8 @@ class EmotionDataset(Dataset):
     """PyTorch Dataset for emotion recognition.
 
     Each item is (features, label) where features are produced by the
-    supplied FeatureExtractor on-the-fly.
+    supplied FeatureExtractor on-the-fly, or loaded from a FeatureCache
+    when one is provided (avoids recomputation across epochs and runs).
     """
 
     def __init__(
@@ -73,11 +74,13 @@ class EmotionDataset(Dataset):
         preprocessor: AudioPreprocessor,
         feature_extractor,
         label_encoder: LabelEncoder,
+        cache=None,  # Optional[FeatureCache]
     ) -> None:
         self.df = df.reset_index(drop=True)
         self.preprocessor = preprocessor
         self.feature_extractor = feature_extractor
         self.label_encoder = label_encoder
+        self._cache = cache
 
     def __len__(self) -> int:
         return len(self.df)
@@ -85,8 +88,11 @@ class EmotionDataset(Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         row = self.df.iloc[idx]
         label = int(self.label_encoder.transform([row["emotion"]])[0])
-        waveform = self.preprocessor.load(row["path"])
-        features = self.feature_extractor.extract(waveform)
+        if self._cache is not None:
+            features = self._cache.get(row["path"])
+        else:
+            waveform = self.preprocessor.load(row["path"])
+            features = self.feature_extractor.extract(waveform)
         return features, label
 
 

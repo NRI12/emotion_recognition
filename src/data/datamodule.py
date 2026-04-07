@@ -41,8 +41,16 @@ class EmotionDataModule(pl.LightningDataModule):
             seed=self.cfg.seed,
         )
 
+        # Feature cache: skip recomputation on repeated runs / across epochs.
+        cache = None
+        if self.cfg.data.get("use_feature_cache", True):
+            from src.features.cache import FeatureCache
+            cache_dir = self.cfg.data.get("feature_cache_dir", "data/processed")
+            cache = FeatureCache(cache_dir, self.feature_extractor, self.preprocessor)
+            print(f"Feature cache: {cache.cache_dir}")
+
         make = lambda d: EmotionDataset(
-            d, self.preprocessor, self.feature_extractor, self.label_encoder
+            d, self.preprocessor, self.feature_extractor, self.label_encoder, cache=cache
         )
         self.train_ds = make(train_df)
         self.val_ds = make(val_df)
