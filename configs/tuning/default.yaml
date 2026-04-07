@@ -1,0 +1,4 @@
+n_trials: 30
+tune_epochs: 20     # max epochs per Optuna trial (DL models only)
+direction: maximize
+metric: "val/f1"

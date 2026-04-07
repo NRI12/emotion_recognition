@@ -1,0 +1,6 @@
+method: logmel
+n_mels: 128
+n_fft: 2048
+hop_length: 512
+fmax: 8000
+# Output shape: (1, n_mels, n_frames) — log-scaled mel spectrogram for CNN

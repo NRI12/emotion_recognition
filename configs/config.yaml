@@ -1,0 +1,13 @@
+defaults:
+  - data: default
+  - preprocessing: default
+  - feature_extraction: mfcc
+  - model: random_forest
+  - training: default
+  - logging: default
+  - tuning: default
+  - _self_
+
+# Override per run
+pipeline_name: "default"
+seed: 42

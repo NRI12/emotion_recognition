@@ -1,0 +1,4 @@
+type: svm
+C: 1.0
+kernel: rbf
+gamma: scale

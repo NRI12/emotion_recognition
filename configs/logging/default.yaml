@@ -1,0 +1,3 @@
+use_wandb: false
+project: emotion_recognition
+run_dir: "outputs/runs"

@@ -1,0 +1,4 @@
+type: random_forest
+n_estimators: 200
+max_depth: null
+min_samples_split: 2
