@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Any, Dict, List, Tuple
 
 import numpy as np
@@ -120,17 +120,18 @@ def extract_split(
         }
         feat_dict = OmegaConf.to_container(extractor.cfg, resolve=True)
         label_classes = list(label_encoder.classes_)
-        chunksize = max(1, len(args) // (n_workers * 4))
 
-        results = []
+        results = [None] * len(args)
         with ProcessPoolExecutor(
             max_workers=n_workers,
             initializer=_worker_init,
             initargs=(prep_dict, feat_dict, label_classes),
         ) as executor:
+            future_to_idx = {executor.submit(_extract_one, arg): i for i, arg in enumerate(args)}
             with tqdm(total=len(args), desc=f"  {split_name:5s}", unit="sample", dynamic_ncols=True) as bar:
-                for result in executor.map(_extract_one, args, chunksize=chunksize):
-                    results.append(result)
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    results[idx] = future.result()
                     bar.update(1)
 
         features = [r[0] for r in results]
