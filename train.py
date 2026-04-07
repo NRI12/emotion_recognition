@@ -1,8 +1,3 @@
-# Windows: prevent OpenMP duplicate-library crash when numpy and torch
-# both ship their own libiomp5md.dll.
-import os
-os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-
 """Main training entry point.
 
 Usage examples:
@@ -22,6 +17,10 @@ from __future__ import annotations
 
 import os
 import time
+
+# Windows: prevent OpenMP duplicate-library crash when numpy and torch
+# both ship their own libiomp5md.dll.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import hydra
 import pytorch_lightning as pl

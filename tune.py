@@ -1,6 +1,3 @@
-import os
-os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-
 """Hyperparameter tuning with Optuna.
 
 Usage examples:
@@ -17,6 +14,8 @@ from __future__ import annotations
 
 import json
 import os
+
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import hydra
 import optuna

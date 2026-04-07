@@ -1,3 +1,7 @@
 graphify-out/
 .claude/
-data/
+/data/
+__pycache__/
+*.pyc
+*.pyo
+outputs/

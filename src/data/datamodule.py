@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+import pytorch_lightning as pl
+from torch.utils.data import DataLoader
+from omegaconf import DictConfig
+
+from src.data.dataset import (
+    AudioPreprocessor,
+    EmotionDataset,
+    load_dataframe,
+    split_dataframe,
+)
+
+
+class EmotionDataModule(pl.LightningDataModule):
+    """Lightning DataModule: handles splits, datasets, and dataloaders."""
+
+    def __init__(self, cfg: DictConfig, feature_extractor) -> None:
+        super().__init__()
+        self.cfg = cfg
+        self.feature_extractor = feature_extractor
+        self.preprocessor = AudioPreprocessor(cfg.preprocessing)
+        self.batch_size: int = cfg.training.batch_size
+        self.num_workers: int = cfg.training.get("num_workers", 0)
+        # populated by setup()
+        self.num_classes: int = 0
+        self.label_encoder = None
+
+    def setup(self, stage: str = None) -> None:
+        df, self.label_encoder = load_dataframe(self.cfg.data)
+        self.num_classes = len(self.label_encoder.classes_)
+
+        train_df, val_df, test_df = split_dataframe(
+            df,
+            train_ratio=self.cfg.data.train_ratio,
+            val_ratio=self.cfg.data.val_ratio,
+            stratify=self.cfg.data.stratify,
+            seed=self.cfg.seed,
+        )
+
+        make = lambda d: EmotionDataset(
+            d, self.preprocessor, self.feature_extractor, self.label_encoder
+        )
+        self.train_ds = make(train_df)
+        self.val_ds = make(val_df)
+        self.test_ds = make(test_df)
+
+    def train_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+
+    def val_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.val_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+
+    def test_dataloader(self) -> DataLoader:
+        return DataLoader(
+            self.test_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )

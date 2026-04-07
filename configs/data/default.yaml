@@ -1,0 +1,27 @@
+# Path to the label CSV file
+csv_path: "data/data1/label.csv"
+
+# Base directory for audio files.
+# path_mode controls how 'path' column values are resolved:
+#   full     - use path column value as-is
+#   relative - prepend audio_dir to relative paths
+#   basename - extract filename from path column, then join with audio_dir
+audio_dir: "data/data1/data"
+path_mode: "basename"
+
+# Split ratios (test = 1 - train_ratio - val_ratio)
+train_ratio: 0.70
+val_ratio: 0.15
+
+# Stratify splits by emotion label
+stratify: true
+
+# ---------------------------------------------------------------------------
+# Automatic dataset download (optional)
+# ---------------------------------------------------------------------------
+# Set auto_download=true to download the dataset automatically when csv_path
+# does not exist.  The archive is cached under raw_dir so re-runs are instant.
+auto_download: false
+download_url: "https://drive.google.com/file/d/1q3mRjJGw-ZOoc_vLGVijmiIWjCjQIqp4/view"
+raw_dir: "data/raw"
+extract_to: "data"
