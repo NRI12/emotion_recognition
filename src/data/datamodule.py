@@ -22,6 +22,9 @@ class EmotionDataModule(pl.LightningDataModule):
         self.preprocessor = AudioPreprocessor(cfg.preprocessing)
         self.batch_size: int = cfg.training.batch_size
         self.num_workers: int = cfg.training.get("num_workers", 0)
+        self.persistent_workers: bool = (
+            cfg.training.get("persistent_workers", False) and self.num_workers > 0
+        )
         # populated by setup()
         self.num_classes: int = 0
         self.label_encoder = None
@@ -52,6 +55,7 @@ class EmotionDataModule(pl.LightningDataModule):
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
+            persistent_workers=self.persistent_workers,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -61,6 +65,7 @@ class EmotionDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=True,
+            persistent_workers=self.persistent_workers,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -70,4 +75,5 @@ class EmotionDataModule(pl.LightningDataModule):
             shuffle=False,
             num_workers=self.num_workers,
             pin_memory=True,
+            persistent_workers=self.persistent_workers,
         )
