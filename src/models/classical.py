@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import multiprocessing
 import os
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -157,9 +158,13 @@ def extract_split(
         feat_dict = OmegaConf.to_container(extractor.cfg, resolve=True)
         label_classes = list(label_encoder.classes_)
 
+        # Use 'spawn' context to avoid fork-safety issues with torchaudio/PyTorch
+        # (forked workers inherit C++ thread-pool state that can deadlock).
+        _spawn = multiprocessing.get_context("spawn")
         results = [None] * len(args)
         with ProcessPoolExecutor(
             max_workers=n_workers,
+            mp_context=_spawn,
             initializer=_worker_init,
             initargs=(prep_dict, feat_dict, label_classes, cache_dir),
         ) as executor:
