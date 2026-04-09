@@ -22,6 +22,13 @@ import time
 # both ship their own libiomp5md.dll.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
+import torch
+from omegaconf import DictConfig as _DictConfig
+# PyTorch 2.6 changed weights_only=True as default for torch.load.
+# Checkpoints saved by Lightning contain DictConfig (from save_hyperparameters),
+# which must be explicitly allowlisted before trainer.test() loads the checkpoint.
+torch.serialization.add_safe_globals([_DictConfig])
+
 import hydra
 import pytorch_lightning as pl
 from omegaconf import DictConfig
