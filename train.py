@@ -24,15 +24,14 @@ os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import torch
 # PyTorch 2.6 changed weights_only default to True, but Lightning checkpoints
-# produced by save_hyperparameters() embed arbitrary omegaconf/typing objects.
-# Enumerating safe globals is whack-a-mole, so we patch Lightning's loader
-# directly to use weights_only=False for checkpoints we created ourselves.
-import lightning_fabric.utilities.cloud_io as _cloud_io
-_orig_pl_load = _cloud_io._load
-def _pl_load_weights_only_false(path, map_location=None, **kwargs):
-    kwargs["weights_only"] = False
-    return _orig_pl_load(path, map_location=map_location, **kwargs)
-_cloud_io._load = _pl_load_weights_only_false
+# produced by save_hyperparameters() embed omegaconf/typing objects not in the
+# safe-globals list. Patch torch.load itself so the fix covers every call site
+# regardless of how Lightning imports it internally.
+_orig_torch_load = torch.load
+def _torch_load_unsafe(f, map_location=None, pickle_module=None, *, weights_only=False, mmap=None, **kw):
+    return _orig_torch_load(f, map_location=map_location, pickle_module=pickle_module,
+                            weights_only=weights_only, mmap=mmap, **kw)
+torch.load = _torch_load_unsafe
 
 import hydra
 import pytorch_lightning as pl
