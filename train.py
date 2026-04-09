@@ -23,33 +23,16 @@ import time
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import torch
-# PyTorch 2.6 changed weights_only=True as default for torch.load.
-# Lightning checkpoints contain omegaconf types (from save_hyperparameters)
-# that must be explicitly allowlisted.
-from omegaconf.base import ContainerMetadata as _ContainerMetadata
-from omegaconf.dictconfig import DictConfig as _DictConfig
-from omegaconf.listconfig import ListConfig as _ListConfig
-from omegaconf.nodes import (
-    AnyNode as _AnyNode,
-    BooleanNode as _BooleanNode,
-    BytesNode as _BytesNode,
-    EnumNode as _EnumNode,
-    FloatNode as _FloatNode,
-    IntegerNode as _IntegerNode,
-    StringNode as _StringNode,
-)
-torch.serialization.add_safe_globals([
-    _ContainerMetadata,
-    _DictConfig,
-    _ListConfig,
-    _AnyNode,
-    _BooleanNode,
-    _BytesNode,
-    _EnumNode,
-    _FloatNode,
-    _IntegerNode,
-    _StringNode,
-])
+# PyTorch 2.6 changed weights_only default to True, but Lightning checkpoints
+# produced by save_hyperparameters() embed arbitrary omegaconf/typing objects.
+# Enumerating safe globals is whack-a-mole, so we patch Lightning's loader
+# directly to use weights_only=False for checkpoints we created ourselves.
+import lightning_fabric.utilities.cloud_io as _cloud_io
+_orig_pl_load = _cloud_io._load
+def _pl_load_weights_only_false(path, map_location=None, **kwargs):
+    kwargs["weights_only"] = False
+    return _orig_pl_load(path, map_location=map_location, **kwargs)
+_cloud_io._load = _pl_load_weights_only_false
 
 import hydra
 import pytorch_lightning as pl
