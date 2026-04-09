@@ -6,6 +6,7 @@ defaults:
   - training: default
   - logging: default
   - tuning: default
+  - augmentation: default
   - _self_
 
 # Override per run

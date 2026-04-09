@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from typing import Optional
+
 import pytorch_lightning as pl
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from omegaconf import DictConfig
 
@@ -13,12 +16,25 @@ from src.data.dataset import (
 
 
 class EmotionDataModule(pl.LightningDataModule):
-    """Lightning DataModule: handles splits, datasets, and dataloaders."""
+    """Lightning DataModule: handles splits, datasets, and dataloaders.
 
-    def __init__(self, cfg: DictConfig, feature_extractor) -> None:
+    Args:
+        cfg:               Full Hydra config.
+        feature_extractor: FeatureExtractor instance.
+        augment:           Optional nn.Module applied to training samples only
+                           (e.g. SpecAugment). Pass None to disable.
+    """
+
+    def __init__(
+        self,
+        cfg: DictConfig,
+        feature_extractor,
+        augment: Optional[nn.Module] = None,
+    ) -> None:
         super().__init__()
         self.cfg = cfg
         self.feature_extractor = feature_extractor
+        self.augment = augment
         self.preprocessor = AudioPreprocessor(cfg.preprocessing)
         self.batch_size: int = cfg.training.batch_size
         self.num_workers: int = cfg.training.get("num_workers", 0)
@@ -49,12 +65,18 @@ class EmotionDataModule(pl.LightningDataModule):
             cache = FeatureCache(cache_dir, self.feature_extractor, self.preprocessor)
             print(f"Feature cache: {cache.cache_dir}")
 
-        make = lambda d: EmotionDataset(
-            d, self.preprocessor, self.feature_extractor, self.label_encoder, cache=cache
+        self.train_ds = EmotionDataset(
+            train_df, self.preprocessor, self.feature_extractor, self.label_encoder,
+            cache=cache, training=True, augment=self.augment,
         )
-        self.train_ds = make(train_df)
-        self.val_ds = make(val_df)
-        self.test_ds = make(test_df)
+        self.val_ds = EmotionDataset(
+            val_df, self.preprocessor, self.feature_extractor, self.label_encoder,
+            cache=cache, training=False,
+        )
+        self.test_ds = EmotionDataset(
+            test_df, self.preprocessor, self.feature_extractor, self.label_encoder,
+            cache=cache, training=False,
+        )
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(

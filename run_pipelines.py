@@ -1,14 +1,27 @@
-"""Run all predefined pipelines sequentially.
+"""Run predefined pipelines sequentially.
 
-Each pipeline is a (feature_extraction, model) pair.  Results from every
-run are appended to outputs/runs/all_results.csv by train.py, so after
-this script finishes you can call compare.py to rank them.
+Each pipeline is a (feature_extraction, model) pair. Results from every run are
+appended to outputs/runs/all_results.csv by train.py, so after this script
+finishes you can call compare.py to rank them.
 
-Usage:
+Usage
+-----
+    # Run all pipelines
     python run_pipelines.py
 
-    # Skip certain pipelines (comma-separated indices)
+    # Run specific models by alias (comma-separated)
+    python run_pipelines.py --models rf,svm,cnn
+
+    # Skip by 0-based index
     python run_pipelines.py --skip 4,5
+
+Available model aliases:
+    rf    → mfcc_random_forest
+    svm   → mfcc_svm
+    lr    → mfcc_logistic_regression
+    mlp   → mfcc_mlp
+    cnn   → melspec_cnn
+    logmel_cnn → logmel_cnn
 """
 from __future__ import annotations
 
@@ -20,14 +33,24 @@ from typing import Dict, List
 
 PIPELINES: List[Dict[str, str]] = [
     # Classical ML
-    {"name": "mfcc_random_forest",       "feature_extraction": "mfcc",   "model": "random_forest"},
-    {"name": "mfcc_svm",                 "feature_extraction": "mfcc",   "model": "svm"},
-    {"name": "mfcc_logistic_regression", "feature_extraction": "mfcc",   "model": "logistic_regression"},
+    {"name": "mfcc_random_forest",       "feature_extraction": "mfcc",    "model": "random_forest"},
+    {"name": "mfcc_svm",                 "feature_extraction": "mfcc",    "model": "svm"},
+    {"name": "mfcc_logistic_regression", "feature_extraction": "mfcc",    "model": "logistic_regression"},
     # Deep learning
-    {"name": "mfcc_mlp",                 "feature_extraction": "mfcc",   "model": "mlp"},
-    {"name": "melspec_cnn",              "feature_extraction": "melspec", "model": "cnn"},
-    {"name": "logmel_cnn",               "feature_extraction": "logmel",  "model": "cnn"},
+    {"name": "mfcc_mlp",                 "feature_extraction": "mfcc",    "model": "mlp"},
+    {"name": "melspec_cnn",              "feature_extraction": "melspec",  "model": "cnn"},
+    {"name": "logmel_cnn",               "feature_extraction": "logmel",   "model": "cnn"},
 ]
+
+# Short aliases for --models flag
+_ALIASES: Dict[str, str] = {
+    "rf":        "mfcc_random_forest",
+    "svm":       "mfcc_svm",
+    "lr":        "mfcc_logistic_regression",
+    "mlp":       "mfcc_mlp",
+    "cnn":       "melspec_cnn",
+    "logmel_cnn":"logmel_cnn",
+}
 
 
 def _run(pipeline: Dict[str, str]) -> int:
@@ -43,21 +66,46 @@ def _run(pipeline: Dict[str, str]) -> int:
     return subprocess.run(cmd).returncode
 
 
+def _select_pipelines(models_arg: str) -> List[Dict[str, str]]:
+    """Resolve --models aliases to pipeline dicts."""
+    names = {_ALIASES.get(m.strip(), m.strip()) for m in models_arg.split(",")}
+    selected = [p for p in PIPELINES if p["name"] in names]
+    missing = names - {p["name"] for p in selected}
+    if missing:
+        valid = ", ".join(_ALIASES.keys()) + ", " + ", ".join(p["name"] for p in PIPELINES)
+        print(f"[warn] Unknown model(s): {missing}. Valid options: {valid}")
+    return selected
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Run predefined training pipelines sequentially."
+    )
+    parser.add_argument(
+        "--models",
+        default="",
+        help="Comma-separated model aliases to run (e.g. rf,svm,cnn). "
+             "Omit to run all pipelines.",
+    )
     parser.add_argument(
         "--skip",
         default="",
-        help="Comma-separated 0-based indices of pipelines to skip",
+        help="Comma-separated 0-based indices of pipelines to skip (ignored when --models is set).",
     )
     args = parser.parse_args()
-    skip = {int(i) for i in args.skip.split(",") if i.strip()}
+
+    if args.models:
+        pipelines = _select_pipelines(args.models)
+    else:
+        skip = {int(i) for i in args.skip.split(",") if i.strip()}
+        pipelines = [p for i, p in enumerate(PIPELINES) if i not in skip]
+
+    if not pipelines:
+        print("No pipelines selected. Exiting.")
+        sys.exit(0)
 
     failed: List[str] = []
-    for idx, pipeline in enumerate(PIPELINES):
-        if idx in skip:
-            print(f"Skipping [{idx}] {pipeline['name']}")
-            continue
+    for pipeline in pipelines:
         rc = _run(pipeline)
         if rc != 0:
             failed.append(pipeline["name"])

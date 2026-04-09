@@ -1,0 +1,10 @@
+# SpecAugment — applied to training samples only (temporal/2-D features).
+# Has no effect on flat features (classical ML / MLP).
+# Enable via: python train.py augmentation.enabled=true
+enabled: false
+
+spec_augment:
+  freq_mask_param: 15   # max frequency mask size (bins)
+  time_mask_param: 35   # max time mask size (frames)
+  n_freq_masks: 2
+  n_time_masks: 2

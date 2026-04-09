@@ -2,5 +2,14 @@ method: logmel
 n_mels: 128
 n_fft: 2048
 hop_length: 512
-fmax: 8000
-# Output shape: (1, n_mels, n_frames) — log-scaled mel spectrogram for CNN
+fmax: 8000.0
+
+use_delta: false
+use_delta_delta: false
+
+# output_mode: temporal → (C, n_mels, T) for CNN (default)
+#              flat     → (2·C·n_mels,) flattened
+output_mode: temporal
+
+# normalize: per_sample (zero-mean unit-var per channel) | none
+normalize: per_sample

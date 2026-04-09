@@ -1,5 +1,18 @@
 method: mfcc
 n_mfcc: 40
+n_mels: 128      # mel filterbanks used internally by the MFCC DCT
 n_fft: 2048
 hop_length: 512
-# Output shape: (n_mfcc * 2,) — mean + std across time frames
+fmax: 8000.0
+
+# Delta / delta-delta: expand channels (C=1→2→3), adds velocity / acceleration
+use_delta: false
+use_delta_delta: false   # only takes effect when use_delta=true
+
+# output_mode: flat   → (2·C·n_mfcc,) 1-D tensor for classical ML / MLP
+#              temporal → (C, n_mfcc, T)  2-D tensor for CNN
+output_mode: flat
+
+# normalize: per_sample (instance norm) | none
+# For flat output, StandardScaler in the sklearn pipeline handles normalization.
+normalize: none

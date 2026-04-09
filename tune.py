@@ -23,13 +23,13 @@ import pytorch_lightning as pl
 from omegaconf import DictConfig, OmegaConf
 
 from src.data.datamodule import EmotionDataModule
-from src.data.dataset import AudioPreprocessor, load_dataframe, split_dataframe
 from src.data.download import ensure_dataset
 from src.features.extractor import FeatureExtractor
 from src.models.cnn import CNNModule
 from src.models.classical import build_sklearn_pipeline, extract_split
 from src.models.mlp import MLPModule
 from src.evaluation.metrics import compute_metrics
+from src.data.dataset import AudioPreprocessor, load_dataframe, split_dataframe
 
 _CLASSICAL = {"random_forest", "svm", "logistic_regression"}
 
@@ -98,7 +98,7 @@ def _objective_dl(base_cfg: DictConfig, trial: optuna.Trial) -> float:
     if model_type == "mlp":
         model = MLPModule(cfg, input_dim=extractor.get_feature_dim(), num_classes=num_classes)
     else:
-        model = CNNModule(cfg, num_classes=num_classes)
+        model = CNNModule(cfg, num_classes=num_classes, in_chans=extractor.get_output_channels())
 
     trainer = pl.Trainer(
         max_epochs=cfg.tuning.tune_epochs,

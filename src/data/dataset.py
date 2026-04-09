@@ -66,6 +66,10 @@ class EmotionDataset(Dataset):
     Each item is (features, label) where features are produced by the
     supplied FeatureExtractor on-the-fly, or loaded from a FeatureCache
     when one is provided (avoids recomputation across epochs and runs).
+
+    When training=True and augment is provided, the augmentation transform
+    is applied after loading features (cached features are pre-augmentation,
+    so augmentation varies every epoch).
     """
 
     def __init__(
@@ -74,13 +78,17 @@ class EmotionDataset(Dataset):
         preprocessor: AudioPreprocessor,
         feature_extractor,
         label_encoder: LabelEncoder,
-        cache=None,  # Optional[FeatureCache]
+        cache=None,           # Optional[FeatureCache]
+        training: bool = False,
+        augment=None,         # Optional[nn.Module] — applied only when training=True
     ) -> None:
         self.df = df.reset_index(drop=True)
         self.preprocessor = preprocessor
         self.feature_extractor = feature_extractor
         self.label_encoder = label_encoder
         self._cache = cache
+        self.training = training
+        self.augment = augment
 
     def __len__(self) -> int:
         return len(self.df)
@@ -93,6 +101,10 @@ class EmotionDataset(Dataset):
         else:
             waveform = self.preprocessor.load(row["path"])
             features = self.feature_extractor.extract(waveform)
+        # Augmentation applied on-the-fly (after cache load) — only during training
+        # and only for 2-D spectrograms (temporal mode, shape (C, F, T))
+        if self.training and self.augment is not None and features.ndim == 3:
+            features = self.augment(features)
         return features, label
 
 

@@ -13,16 +13,19 @@ from omegaconf import DictConfig
 class CNNModule(pl.LightningModule):
     """Lightning module using a timm CNN backbone on single-channel spectrogram input."""
 
-    def __init__(self, cfg: DictConfig, num_classes: int) -> None:
+    def __init__(self, cfg: DictConfig, num_classes: int, in_chans: int = 1) -> None:
         super().__init__()
         self.save_hyperparameters()
         self.cfg = cfg
 
+        # in_chans is derived from the extractor's get_output_channels():
+        #   plain spectrogram → 1, +delta → 2, +delta+delta2 → 3
+        # timm handles the first-conv weight adaptation automatically.
         self.backbone = timm.create_model(
             cfg.model.backbone,
             pretrained=cfg.model.pretrained,
             num_classes=num_classes,
-            in_chans=1,  # single-channel spectrogram
+            in_chans=in_chans,
         )
         self.criterion = nn.CrossEntropyLoss()
         self._build_metrics(num_classes)
