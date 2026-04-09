@@ -23,8 +23,33 @@ import time
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 import torch
-from omegaconf import DictConfig as _DictConfig
-torch.serialization.add_safe_globals([_DictConfig])
+# PyTorch 2.6 changed weights_only=True as default for torch.load.
+# Lightning checkpoints contain omegaconf types (from save_hyperparameters)
+# that must be explicitly allowlisted.
+from omegaconf.base import ContainerMetadata as _ContainerMetadata
+from omegaconf.dictconfig import DictConfig as _DictConfig
+from omegaconf.listconfig import ListConfig as _ListConfig
+from omegaconf.nodes import (
+    AnyNode as _AnyNode,
+    BooleanNode as _BooleanNode,
+    BytesNode as _BytesNode,
+    EnumNode as _EnumNode,
+    FloatNode as _FloatNode,
+    IntegerNode as _IntegerNode,
+    StringNode as _StringNode,
+)
+torch.serialization.add_safe_globals([
+    _ContainerMetadata,
+    _DictConfig,
+    _ListConfig,
+    _AnyNode,
+    _BooleanNode,
+    _BytesNode,
+    _EnumNode,
+    _FloatNode,
+    _IntegerNode,
+    _StringNode,
+])
 
 import hydra
 import pytorch_lightning as pl
