@@ -30,7 +30,7 @@ import torch
 _orig_torch_load = torch.load
 def _torch_load_unsafe(f, map_location=None, pickle_module=None, *, weights_only=False, mmap=None, **kw):
     return _orig_torch_load(f, map_location=map_location, pickle_module=pickle_module,
-                            weights_only=weights_only, mmap=mmap, **kw)
+                            weights_only=False, mmap=mmap, **kw)
 torch.load = _torch_load_unsafe
 
 import hydra
