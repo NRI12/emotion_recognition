@@ -127,14 +127,9 @@ def main(cfg: DictConfig) -> None:
     feat_method = cfg.feature_extraction.method
     study_name = f"{model_type}_{feat_method}"
 
-    os.makedirs("outputs/optuna", exist_ok=True)
-    storage = f"sqlite:///outputs/optuna/{study_name}.db"
-
     study = optuna.create_study(
         direction="maximize",
         study_name=study_name,
-        storage=storage,
-        load_if_exists=True,
     )
 
     objective = (
