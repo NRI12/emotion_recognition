@@ -1,9 +1,9 @@
 max_epochs: 100
 lr: 1.0e-3
-batch_size: 32
-num_workers: 24      # parallel DataLoader workers; increase if CPU allows
+batch_size: 64
+num_workers: 12      # parallel DataLoader workers; increase if CPU allows
 persistent_workers: true   # keep workers alive between epochs (avoids re-spawn overhead)
 patience: 20        # EarlyStopping patience (epochs)
 weight_decay: 1.0e-4
-extraction_workers: 24  # parallel workers for classical feature extraction (ProcessPoolExecutor)
+extraction_workers: 12  # parallel workers for classical feature extraction (ProcessPoolExecutor)
 model_artifacts_dir: "artifacts/models"  # where classical model .pkl files are saved
