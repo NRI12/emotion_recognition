@@ -70,7 +70,7 @@ def main(cfg: DictConfig) -> None:
         )
 
     elapsed = time.time() - t0
-    exp_logger.log_run(results, train_time=results.pop("train_time", elapsed))
+    exp_logger.log_run(results, train_time=elapsed)
 
 
 if __name__ == "__main__":

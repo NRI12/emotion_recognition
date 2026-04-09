@@ -93,9 +93,17 @@ class DeepLearningPipeline(BasePipeline):
 
         t0 = time.time()
         trainer.fit(model, datamodule)
+
+        # Capture val metrics from the last validation pass (before best-ckpt restore).
+        # callback_metrics are overwritten by trainer.test(), so read them here.
+        val_acc = float(trainer.callback_metrics.get("val/acc", 0.0) or 0.0)
+        val_f1  = float(trainer.callback_metrics.get("val/f1",  0.0) or 0.0)
+
         test_results = trainer.test(model, datamodule, ckpt_path="best")
         train_time = time.time() - t0
 
-        results = test_results[0] if test_results else {}
-        results["train_time"] = train_time
+        results: Dict[str, Any] = test_results[0] if test_results else {}
+        results["val/acc"]     = round(val_acc, 4)
+        results["val/f1"]      = round(val_f1,  4)
+        results["train_time"]  = train_time
         return results

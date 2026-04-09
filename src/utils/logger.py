@@ -49,16 +49,17 @@ class ExperimentLogger:
         """Persist run metadata + metrics to the shared CSV (and W&B if enabled)."""
         from src.evaluation.metrics import save_run_results
 
+        # Build row with explicit, fixed keys so the CSV schema never shifts.
         row: Dict[str, Any] = {
-            "pipeline_name": self.cfg.get("pipeline_name", "default"),
-            "model_type": self.cfg.model.type,
+            "pipeline_name":  self.cfg.get("pipeline_name", "default"),
+            "model_type":     self.cfg.model.type,
             "feature_method": self.cfg.feature_extraction.method,
             "train_time_sec": round(train_time, 2),
+            "val/acc":  results.get("val/acc",  ""),
+            "val/f1":   results.get("val/f1",   ""),
+            "test/acc": results.get("test/acc", ""),
+            "test/f1":  results.get("test/f1",  ""),
         }
-        # Merge in scalar result values
-        row.update(
-            {k: v for k, v in results.items() if isinstance(v, (int, float, str, bool))}
-        )
 
         save_run_results(row, self.results_csv)
         print(f"Results saved -> {self.results_csv}")
