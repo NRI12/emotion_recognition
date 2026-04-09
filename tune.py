@@ -14,8 +14,18 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
+# Ensure a usable temp directory exists before PyTorch/torchaudio is imported.
+# Some containers ship without /tmp — torch._inductor crashes on import otherwise.
+_tmp = os.environ.get("TMPDIR") or "/tmp"
+if not os.path.isdir(_tmp):
+    _tmp = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".tmp")
+    os.makedirs(_tmp, exist_ok=True)
+    os.environ["TMPDIR"] = _tmp
+    tempfile.tempdir = _tmp
 
 import hydra
 import optuna

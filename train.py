@@ -19,9 +19,18 @@ Usage examples:
 from __future__ import annotations
 
 import os
+import tempfile
 import time
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
+# Ensure a usable temp directory exists before PyTorch is imported.
+_tmp = os.environ.get("TMPDIR") or "/tmp"
+if not os.path.isdir(_tmp):
+    _tmp = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".tmp")
+    os.makedirs(_tmp, exist_ok=True)
+    os.environ["TMPDIR"] = _tmp
+    tempfile.tempdir = _tmp
 
 import torch
 # PyTorch 2.6 changed weights_only default to True, but Lightning checkpoints
