@@ -38,14 +38,6 @@ Available aliases (base pipelines):
     logmel_bilstm   → logmel_bilstm
     melspec_lstm    → melspec_lstm
     melspec_bilstm  → melspec_bilstm
-    # HuBERT (temporal only)
-    hubert_cnn      → hubert_cnn
-    hubert_lstm     → hubert_lstm
-    hubert_bilstm   → hubert_bilstm
-    # WavLM (temporal only)
-    wavlm_cnn       → wavlm_cnn
-    wavlm_lstm      → wavlm_lstm
-    wavlm_bilstm    → wavlm_bilstm
 
 Augmented aliases are the same name with "_aug" appended, e.g. "cnn_aug".
 """
@@ -87,20 +79,6 @@ PIPELINES: List[Dict] = [
     {"name": "logmel_bilstm", "feature_extraction": "logmel",  "model": "bilstm"},
     {"name": "melspec_lstm",  "feature_extraction": "melspec", "model": "lstm"},
     {"name": "melspec_bilstm","feature_extraction": "melspec", "model": "bilstm"},
-    # ── HuBERT (temporal models only) ────────────────────────────────────
-    {"name": "hubert_cnn",    "feature_extraction": "hubert", "model": "cnn",    "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    {"name": "hubert_lstm",   "feature_extraction": "hubert", "model": "lstm",   "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    {"name": "hubert_bilstm", "feature_extraction": "hubert", "model": "bilstm", "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    # ── WavLM (temporal models only) ─────────────────────────────────────
-    {"name": "wavlm_cnn",    "feature_extraction": "wavlm",  "model": "cnn",    "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    {"name": "wavlm_lstm",   "feature_extraction": "wavlm",  "model": "lstm",   "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    {"name": "wavlm_bilstm", "feature_extraction": "wavlm",  "model": "bilstm", "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
 ]
 
 _ALIASES: Dict[str, str] = {p["name"]: p["name"] for p in PIPELINES}
