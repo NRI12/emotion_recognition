@@ -8,15 +8,14 @@ Cache layout:
     <cache_root>/<method>_<cfg_hash>/<md5(audio_path)>.npy
 
 Using .npy (numpy) instead of .pt (torch):
-  - No CUDA/torch initialisation in spawned worker processes
   - Read by both classical (numpy) and DL (torch.from_numpy) paths
-  - Each file is uniquely named → workers write in parallel without locks
+  - Each file is uniquely named → threads write in parallel without locks
+    (atomic rename ensures no partial reads)
 
 Public API:
     cache = FeatureCache(cache_root, extractor, preprocessor)
-    tensor  = cache.get(audio_path)   # torch.Tensor, for DL path
-    ndarray = cache.get_numpy(audio_path)   # np.ndarray, for classical path
-    params  = cache.worker_params()   # picklable dict for ProcessPoolExecutor
+    tensor  = cache.get(audio_path)        # torch.Tensor, for DL path
+    ndarray = cache.get_numpy(audio_path)  # np.ndarray, for classical path
 """
 from __future__ import annotations
 
@@ -24,8 +23,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Optional
-
 import numpy as np
 import torch
 from omegaconf import DictConfig, OmegaConf
@@ -106,10 +103,6 @@ class FeatureCache:
             tmp.unlink(missing_ok=True)  # another worker already wrote it
         return features
 
-    def worker_params(self) -> dict:
-        """Picklable dict passed to ProcessPoolExecutor worker initializer."""
-        return {"cache_dir": str(self._dir)}
-
     @property
     def cache_dir(self) -> Path:
         return self._dir
@@ -120,37 +113,3 @@ class FeatureCache:
 
     def _cache_path(self, audio_path: str) -> Path:
         return self._dir / f"{_path_key(audio_path)}.npy"
-
-
-# ---------------------------------------------------------------------------
-# Standalone worker helper (used by classical.py multiprocessing workers)
-# ---------------------------------------------------------------------------
-
-def worker_get_numpy(path: str, cache_dir: Optional[str]) -> Optional[np.ndarray]:
-    """Load a cached feature array inside a worker process.
-
-    Returns the array if the cache file exists, else None (caller must compute).
-    Does NOT compute or save — keeps worker logic in classical.py.
-    """
-    if cache_dir is None:
-        return None
-    cache_file = Path(cache_dir) / f"{_path_key(path)}.npy"
-    if cache_file.exists():
-        return np.load(cache_file)
-    return None
-
-
-def worker_save_numpy(path: str, arr: np.ndarray, cache_dir: Optional[str]) -> None:
-    """Save a feature array from inside a worker process (atomic write)."""
-    if cache_dir is None:
-        return
-    cache_dir_p = Path(cache_dir)
-    cache_file = cache_dir_p / f"{_path_key(path)}.npy"
-    if cache_file.exists():
-        return  # already written by another worker
-    tmp = cache_dir_p / f"{_path_key(path)}.tmp{os.getpid()}"
-    np.save(tmp, arr)
-    try:
-        tmp.rename(cache_file)
-    except OSError:
-        tmp.unlink(missing_ok=True)

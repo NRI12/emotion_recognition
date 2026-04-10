@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import multiprocessing
 import os
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -15,70 +14,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.svm import SVC
 from tqdm import tqdm
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig
 
 from src.data.dataset import AudioPreprocessor, load_dataframe
 from src.features.extractor import FeatureExtractor
-
-# ---------------------------------------------------------------------------
-# Per-process worker state — set once by _worker_init, reused for every task.
-# Module-level globals are required for ProcessPoolExecutor on Windows (spawn).
-# ---------------------------------------------------------------------------
-_wp: AudioPreprocessor = None   # type: ignore[assignment]
-_we: FeatureExtractor = None    # type: ignore[assignment]
-_wl: LabelEncoder = None        # type: ignore[assignment]
-_wcache_dir: Optional[str] = None
-
-
-def _worker_init(
-    prep_dict: dict,
-    feat_dict: dict,
-    label_classes: List[str],
-    cache_dir: Optional[str] = None,
-) -> None:
-    """Initializer called once per worker process.
-
-    Reconstructs AudioPreprocessor and FeatureExtractor from plain dicts
-    (picklable) so they are ready for every _extract_one call in this process.
-    cache_dir: if set, workers read/write per-sample .npy cache files.
-    """
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
-
-    global _wp, _we, _wl, _wcache_dir
-
-    prep_cfg = OmegaConf.create(prep_dict)
-    feat_cfg = OmegaConf.create(feat_dict)
-
-    _wp = AudioPreprocessor(prep_cfg)
-    _we = FeatureExtractor(feat_cfg, prep_cfg)
-    _wl = LabelEncoder()
-    _wl.classes_ = np.array(label_classes)
-    _wcache_dir = cache_dir
-
-
-def _extract_one(args: Tuple[str, str]) -> Tuple[np.ndarray, int]:
-    """Worker: load one audio file and return (feature_vector, label_int).
-
-    Checks the on-disk cache first; writes to cache after computing.
-    """
-    from src.features.cache import worker_get_numpy, worker_save_numpy
-
-    path, emotion = args
-    label = int(_wl.transform([emotion])[0])
-
-    # Cache hit
-    cached = worker_get_numpy(path, _wcache_dir)
-    if cached is not None:
-        return cached, label
-
-    # Compute
-    waveform = _wp.load(path)
-    feat = _we.extract(waveform).numpy()
-
-    # Cache write
-    worker_save_numpy(path, feat, _wcache_dir)
-
-    return feat, label
 
 
 # ---------------------------------------------------------------------------
@@ -126,80 +65,71 @@ def extract_split(
     df: pd.DataFrame,
     preprocessor: AudioPreprocessor,
     extractor: FeatureExtractor,
-    label_encoder,
+    label_encoder: LabelEncoder,
     split_name: str = "split",
-    log_every: int = 100,
+    log_every: int = 200,
     n_workers: int = 1,
     cache=None,  # Optional[FeatureCache]
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Extract flat features for all rows in a DataFrame.
 
-    Args:
-        df:          Rows to process.
-        preprocessor: AudioPreprocessor instance.
-        extractor:   FeatureExtractor instance.
-        label_encoder: Fitted LabelEncoder.
-        split_name:  Label shown in the progress bar (e.g. "train").
-        log_every:   Print a debug line every N samples (0 = disabled).
-        n_workers:   Number of worker processes (1 = sequential).
-        cache:       Optional FeatureCache; used in sequential path and passed
-                     to workers via cache_dir string.
+    Uses ThreadPoolExecutor for parallel extraction when n_workers > 1.
+    Threads are safe here because:
+      - soundfile.read() releases the GIL (C extension)
+      - torchaudio transforms release the GIL (PyTorch C++ backend)
+      - numpy operations release the GIL (C extension)
+      - LabelEncoder.transform() is read-only after fit (stateless)
+      - FeatureCache uses atomic file writes (process + thread safe)
+
+    This avoids the fork/spawn issues that plague ProcessPoolExecutor
+    when PyTorch's C++ thread pool is already initialised in the parent.
     """
     t_start = time.time()
-    args = list(zip(df["path"].tolist(), df["emotion"].tolist()))
-    cache_dir = str(cache.cache_dir) if cache is not None else None
+    rows: List[Tuple[str, str]] = list(
+        zip(df["path"].tolist(), df["emotion"].tolist())
+    )
+    n = len(rows)
 
-    if n_workers > 1:
-        prep_dict = {
-            "sample_rate": preprocessor.sample_rate,
-            "duration": preprocessor.duration,
-            "normalize": preprocessor.normalize,
-        }
-        feat_dict = OmegaConf.to_container(extractor.cfg, resolve=True)
-        label_classes = list(label_encoder.classes_)
+    def _do_one(path: str, emotion: str) -> Tuple[np.ndarray, int]:
+        """Extract one sample (thread-safe, runs in worker thread)."""
+        if cache is not None:
+            feat = cache.get_numpy(path)
+        else:
+            waveform = preprocessor.load(path)
+            feat = extractor.extract(waveform).numpy()
+        label = int(label_encoder.transform([emotion])[0])
+        return feat, label
 
-        # Use 'spawn' context to avoid fork-safety issues with torchaudio/PyTorch
-        # (forked workers inherit C++ thread-pool state that can deadlock).
-        _spawn = multiprocessing.get_context("spawn")
-        results = [None] * len(args)
-        with ProcessPoolExecutor(
-            max_workers=n_workers,
-            mp_context=_spawn,
-            initializer=_worker_init,
-            initargs=(prep_dict, feat_dict, label_classes, cache_dir),
-        ) as executor:
-            future_to_idx = {executor.submit(_extract_one, arg): i for i, arg in enumerate(args)}
-            with tqdm(total=len(args), desc=f"  {split_name:5s}", unit="sample", dynamic_ncols=True) as bar:
+    features: List[Optional[np.ndarray]] = [None] * n
+    labels:   List[Optional[int]]        = [None] * n
+
+    n_threads = min(max(n_workers, 1), n)
+
+    with tqdm(total=n, desc=f"  {split_name:5s}", unit="sample", dynamic_ncols=True) as bar:
+        if n_threads > 1:
+            with ThreadPoolExecutor(max_workers=n_threads) as pool:
+                future_to_idx = {
+                    pool.submit(_do_one, path, emotion): i
+                    for i, (path, emotion) in enumerate(rows)
+                }
                 for future in as_completed(future_to_idx):
                     idx = future_to_idx[future]
-                    results[idx] = future.result()
+                    features[idx], labels[idx] = future.result()
                     bar.update(1)
-
-        features = [r[0] for r in results]
-        labels = [r[1] for r in results]
-    else:
-        features, labels = [], []
-        with tqdm(total=len(df), desc=f"  {split_name:5s}", unit="sample", dynamic_ncols=True) as bar:
-            for i, (path, emotion) in enumerate(args):
-                if cache is not None:
-                    feat = cache.get_numpy(path)
-                else:
-                    waveform = preprocessor.load(path)
-                    feat = extractor.extract(waveform).numpy()
-                features.append(feat)
-                labels.append(int(label_encoder.transform([emotion])[0]))
+        else:
+            for i, (path, emotion) in enumerate(rows):
+                features[i], labels[i] = _do_one(path, emotion)
                 bar.update(1)
-
                 if log_every > 0 and (i + 1) % log_every == 0:
                     elapsed = time.time() - t_start
-                    rate = (i + 1) / elapsed
                     bar.write(
-                        f"    [{split_name}] {i + 1}/{len(df)} samples"
-                        f"  ({rate:.1f} samples/s)"
+                        f"    [{split_name}] {i + 1}/{n}"
+                        f"  ({(i + 1) / elapsed:.1f} samples/s)"
                     )
 
     elapsed = time.time() - t_start
-    print(f"  {split_name}: {len(df)} samples in {elapsed:.1f}s  ({len(df)/elapsed:.1f} samples/s)")
+    rate = n / elapsed if elapsed > 0 else 0
+    print(f"  {split_name}: {n} samples in {elapsed:.1f}s  ({rate:.1f} samples/s)")
     return np.array(features), np.array(labels)
 
 
@@ -222,5 +152,3 @@ def save_classical_model(
     dump({"model": model, "label_encoder": label_encoder}, model_path)
     print(f"Model saved -> {model_path}")
     return model_path
-
-
