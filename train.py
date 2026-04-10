@@ -51,7 +51,7 @@ from src.features.extractor import FeatureExtractor
 from src.utils.logger import ExperimentLogger
 
 _CLASSICAL = {"random_forest", "svm", "logistic_regression"}
-_DL        = {"mlp", "cnn"}
+_DL        = {"mlp", "cnn", "lstm", "bilstm"}
 
 
 @hydra.main(config_path="configs", config_name="config", version_base=None)

@@ -59,6 +59,13 @@ class DeepLearningPipeline(BasePipeline):
                 num_classes=num_classes,
                 in_chans=self.extractor.get_output_channels(),
             )
+        elif model_type in ("lstm", "bilstm"):
+            from src.models.rnn import RNNModule
+            model = RNNModule(
+                cfg,
+                input_size=self.extractor.get_temporal_input_size(),
+                num_classes=num_classes,
+            )
         else:
             raise ValueError(f"Unknown DL model type: {model_type!r}")
 

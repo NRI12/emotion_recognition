@@ -131,6 +131,25 @@ class FeatureExtractor:
         """Number of channels C in the (C, F, T) tensor representation."""
         return 1 + int(self.use_delta) + int(self.use_delta and self.use_delta_delta)
 
+    def get_temporal_input_size(self) -> int:
+        """C × F — flattened feature dimension per time step, for RNN/LSTM input.
+
+        The temporal tensor has shape (C, F, T); each time step fed to the RNN
+        is the concatenation of all channels: C × F values.
+        """
+        C = self.get_output_channels()
+        if self.method == "mfcc":
+            return C * self.cfg.n_mfcc
+        elif self.method in ("logmel", "melspec"):
+            return C * self.cfg.n_mels
+        elif self.method in self.SSL_METHODS:
+            return self.cfg.hidden_size   # C is always 1 for SSL
+        elif self.method == "chroma":
+            return C * 12
+        elif self.method == "spectral_contrast":
+            return C * 7
+        raise ValueError(f"Unknown method: {self.method!r}")
+
     @property
     def is_flat(self) -> bool:
         return self.output_mode == "flat"
