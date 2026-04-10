@@ -24,32 +24,30 @@ Usage
     python run_pipelines.py --force                  # ignore existing artifacts
 
 Available aliases (base pipelines):
+    # Classical ML (MFCC only)
     rf              → mfcc_random_forest
     svm             → mfcc_svm
     lr              → mfcc_logistic_regression
+    # Spectral deep learning
     mlp             → mfcc_mlp
     cnn             → melspec_cnn
     logmel_cnn      → logmel_cnn
-    hubert_rf       → hubert_random_forest
-    hubert_svm      → hubert_svm
-    hubert_lr       → hubert_logistic_regression
-    hubert_mlp      → hubert_mlp
-    hubert_cnn      → hubert_cnn
-    hubert_lstm     → hubert_lstm
-    hubert_bilstm   → hubert_bilstm
-    wavlm_rf        → wavlm_random_forest
-    wavlm_svm       → wavlm_svm
-    wavlm_lr        → wavlm_logistic_regression
-    wavlm_mlp       → wavlm_mlp
-    wavlm_cnn       → wavlm_cnn
-    wavlm_lstm      → wavlm_lstm
-    wavlm_bilstm    → wavlm_bilstm
     mfcc_lstm       → mfcc_lstm
     mfcc_bilstm     → mfcc_bilstm
     logmel_lstm     → logmel_lstm
     logmel_bilstm   → logmel_bilstm
     melspec_lstm    → melspec_lstm
     melspec_bilstm  → melspec_bilstm
+    # HuBERT (MLP + temporal only)
+    hubert_mlp      → hubert_mlp
+    hubert_cnn      → hubert_cnn
+    hubert_lstm     → hubert_lstm
+    hubert_bilstm   → hubert_bilstm
+    # WavLM (MLP + temporal only)
+    wavlm_mlp       → wavlm_mlp
+    wavlm_cnn       → wavlm_cnn
+    wavlm_lstm      → wavlm_lstm
+    wavlm_bilstm    → wavlm_bilstm
 
 Augmented aliases are the same name with "_aug" appended, e.g. "cnn_aug".
 """
@@ -74,38 +72,14 @@ from typing import Dict, List
 # ---------------------------------------------------------------------------
 
 PIPELINES: List[Dict] = [
-    # ── Classical ML (MFCC) ───────────────────────────────────────────────
+    # ── Classical ML (MFCC only) ──────────────────────────────────────────
     {"name": "mfcc_random_forest",       "feature_extraction": "mfcc", "model": "random_forest"},
     {"name": "mfcc_svm",                 "feature_extraction": "mfcc", "model": "svm"},
     {"name": "mfcc_logistic_regression", "feature_extraction": "mfcc", "model": "logistic_regression"},
-    # ── Deep learning (spectral) ──────────────────────────────────────────
+    # ── Spectral deep learning ────────────────────────────────────────────
     {"name": "mfcc_mlp",     "feature_extraction": "mfcc",    "model": "mlp"},
     {"name": "melspec_cnn",  "feature_extraction": "melspec",  "model": "cnn"},
     {"name": "logmel_cnn",   "feature_extraction": "logmel",   "model": "cnn"},
-    # ── HuBERT flat ───────────────────────────────────────────────────────
-    {"name": "hubert_random_forest",       "feature_extraction": "hubert", "model": "random_forest",      "preprocessing": "ssl"},
-    {"name": "hubert_svm",                 "feature_extraction": "hubert", "model": "svm",                 "preprocessing": "ssl"},
-    {"name": "hubert_logistic_regression", "feature_extraction": "hubert", "model": "logistic_regression", "preprocessing": "ssl"},
-    {"name": "hubert_mlp",                 "feature_extraction": "hubert", "model": "mlp",                 "preprocessing": "ssl"},
-    # ── HuBERT temporal ───────────────────────────────────────────────────
-    {"name": "hubert_cnn",    "feature_extraction": "hubert", "model": "cnn",    "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    {"name": "hubert_lstm",   "feature_extraction": "hubert", "model": "lstm",   "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    {"name": "hubert_bilstm", "feature_extraction": "hubert", "model": "bilstm", "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    # ── WavLM flat ────────────────────────────────────────────────────────
-    {"name": "wavlm_random_forest",       "feature_extraction": "wavlm", "model": "random_forest",      "preprocessing": "ssl"},
-    {"name": "wavlm_svm",                 "feature_extraction": "wavlm", "model": "svm",                 "preprocessing": "ssl"},
-    {"name": "wavlm_logistic_regression", "feature_extraction": "wavlm", "model": "logistic_regression", "preprocessing": "ssl"},
-    {"name": "wavlm_mlp",                 "feature_extraction": "wavlm", "model": "mlp",                 "preprocessing": "ssl"},
-    # ── WavLM temporal ────────────────────────────────────────────────────
-    {"name": "wavlm_cnn",    "feature_extraction": "wavlm", "model": "cnn",    "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    {"name": "wavlm_lstm",   "feature_extraction": "wavlm", "model": "lstm",   "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
-    {"name": "wavlm_bilstm", "feature_extraction": "wavlm", "model": "bilstm", "preprocessing": "ssl",
-     "overrides": ["feature_extraction.output_mode=temporal"]},
     # ── LSTM / BiLSTM (spectral) ──────────────────────────────────────────
     {"name": "mfcc_lstm",     "feature_extraction": "mfcc",    "model": "lstm",
      "overrides": ["feature_extraction.output_mode=temporal"]},
@@ -115,6 +89,22 @@ PIPELINES: List[Dict] = [
     {"name": "logmel_bilstm", "feature_extraction": "logmel",  "model": "bilstm"},
     {"name": "melspec_lstm",  "feature_extraction": "melspec", "model": "lstm"},
     {"name": "melspec_bilstm","feature_extraction": "melspec", "model": "bilstm"},
+    # ── HuBERT (MLP + temporal models only) ──────────────────────────────
+    {"name": "hubert_mlp",    "feature_extraction": "hubert", "model": "mlp",    "preprocessing": "ssl"},
+    {"name": "hubert_cnn",    "feature_extraction": "hubert", "model": "cnn",    "preprocessing": "ssl",
+     "overrides": ["feature_extraction.output_mode=temporal"]},
+    {"name": "hubert_lstm",   "feature_extraction": "hubert", "model": "lstm",   "preprocessing": "ssl",
+     "overrides": ["feature_extraction.output_mode=temporal"]},
+    {"name": "hubert_bilstm", "feature_extraction": "hubert", "model": "bilstm", "preprocessing": "ssl",
+     "overrides": ["feature_extraction.output_mode=temporal"]},
+    # ── WavLM (MLP + temporal models only) ───────────────────────────────
+    {"name": "wavlm_mlp",    "feature_extraction": "wavlm",  "model": "mlp",    "preprocessing": "ssl"},
+    {"name": "wavlm_cnn",    "feature_extraction": "wavlm",  "model": "cnn",    "preprocessing": "ssl",
+     "overrides": ["feature_extraction.output_mode=temporal"]},
+    {"name": "wavlm_lstm",   "feature_extraction": "wavlm",  "model": "lstm",   "preprocessing": "ssl",
+     "overrides": ["feature_extraction.output_mode=temporal"]},
+    {"name": "wavlm_bilstm", "feature_extraction": "wavlm",  "model": "bilstm", "preprocessing": "ssl",
+     "overrides": ["feature_extraction.output_mode=temporal"]},
 ]
 
 _ALIASES: Dict[str, str] = {p["name"]: p["name"] for p in PIPELINES}
