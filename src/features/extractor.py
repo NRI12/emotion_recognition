@@ -286,7 +286,7 @@ class _SSLTransform:
         self._lock = threading.Lock()
 
     # ------------------------------------------------------------------
-    # Lazy loading (thread-safe double-checked locking)
+    # Lazy loading / unloading (thread-safe double-checked locking)
     # ------------------------------------------------------------------
 
     def _load(self) -> None:
@@ -299,6 +299,21 @@ class _SSLTransform:
             self._processor = AutoFeatureExtractor.from_pretrained(self._model_name)
             self._model = AutoModel.from_pretrained(self._model_name).to(self._device)
             self._model.eval()
+
+    def offload(self) -> None:
+        """Release the SSL model from memory after all cache entries are built.
+
+        Call this once the FeatureCache is fully warm (all samples extracted).
+        Subsequent cache.get() calls load directly from .npy — the model is
+        never needed again for that training run.
+        """
+        with self._lock:
+            self._model = None
+            self._processor = None
+            if self._device.startswith("cuda"):
+                import torch as _torch
+                _torch.cuda.empty_cache()
+            print(f"[SSL] {self._method} model offloaded from memory.")
 
     # ------------------------------------------------------------------
     # Forward pass

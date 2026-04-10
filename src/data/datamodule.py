@@ -54,9 +54,29 @@ class EmotionDataModule(pl.LightningDataModule):
             df, self.cfg.data, self.cfg.seed, cache_dir=cache_dir
         )
 
-        # Feature cache: skip recomputation on repeated runs / across epochs.
+        # Feature cache strategy:
+        #
+        # Spectral features (MFCC / logmel / melspec):
+        #   → disk cache (.npy per sample) — fast reads from epoch 2 onward.
+        #
+        # SSL features (HuBERT / WavLM):
+        #   → in-memory cache (RAM, float16) — no disk writes, extracted once
+        #     then reused every epoch.  num_workers is forced to 0 so the
+        #     shared dict lives in the main process (subprocess workers would
+        #     each get an isolated copy, defeating the purpose).
+        is_ssl = self.feature_extractor.method in self.feature_extractor.SSL_METHODS
         cache = None
-        if self.cfg.data.get("use_feature_cache", True):
+
+        if is_ssl:
+            from src.features.cache import InMemoryCache
+            cache = InMemoryCache(self.feature_extractor, self.preprocessor)
+            # Force single-process DataLoader: CUDA cannot be used in forked
+            # subprocesses, and shared-memory dict requires main process.
+            self.num_workers       = 0
+            self.persistent_workers = False
+            print(f"[SSL] In-memory cache enabled — num_workers forced to 0. "
+                  f"HuBERT/WavLM extracts on GPU, results kept in RAM (float16).")
+        elif self.cfg.data.get("use_feature_cache", True):
             from src.features.cache import FeatureCache
             cache = FeatureCache(cache_dir, self.feature_extractor, self.preprocessor)
             print(f"Feature cache: {cache.cache_dir}")
