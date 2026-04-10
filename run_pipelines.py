@@ -200,15 +200,15 @@ def _run(pipeline: Dict) -> int:
 
 def _resolve_names(models_arg: str, all_pipelines: List[Dict]) -> List[Dict]:
     """Resolve comma-separated aliases/names to pipeline dicts."""
+    # lookup: full pipeline name → pipeline dict  (never overwritten by aliases)
     lookup = {p["name"]: p for p in all_pipelines}
-    lookup.update(_ALIASES)  # short aliases → name string
     result: List[Dict] = []
     missing = []
     for token in models_arg.split(","):
         token = token.strip()
-        # token may be an alias (→ name string) or a full name
+        # 1) try short alias → full name, 2) fall back to token as full name
         resolved = _ALIASES.get(token, token)
-        if resolved in lookup and isinstance(lookup[resolved], dict):
+        if resolved in lookup:
             result.append(lookup[resolved])
         else:
             missing.append(token)
