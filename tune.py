@@ -39,7 +39,7 @@ from src.models.cnn import CNNModule
 from src.models.classical import build_sklearn_pipeline, extract_split
 from src.models.mlp import MLPModule
 from src.evaluation.metrics import compute_metrics
-from src.data.dataset import AudioPreprocessor, load_dataframe, split_dataframe
+from src.data.dataset import AudioPreprocessor, load_dataframe, get_or_create_splits
 
 _CLASSICAL = {"random_forest", "svm", "logistic_regression"}
 
@@ -67,15 +67,20 @@ def _objective_classical(base_cfg: DictConfig, trial: optuna.Trial) -> float:
     preprocessor = AudioPreprocessor(cfg.preprocessing)
 
     df, label_encoder = load_dataframe(cfg.data)
-    train_df, val_df, _ = split_dataframe(
-        df,
-        train_ratio=cfg.data.train_ratio,
-        val_ratio=cfg.data.val_ratio,
-        stratify=cfg.data.stratify,
-        seed=cfg.seed,
-    )
-    X_train, y_train = extract_split(train_df, preprocessor, extractor, label_encoder)
-    X_val, y_val = extract_split(val_df, preprocessor, extractor, label_encoder)
+
+    # Consistent splits across all trials (same seed + config → same indices)
+    cache_dir = cfg_dict["data"].get("feature_cache_dir", "data/processed")
+    train_df, val_df, _ = get_or_create_splits(df, cfg.data, cfg.seed, cache_dir=cache_dir)
+
+    # Feature cache — feature extraction config is constant across trials,
+    # so the cache is populated on the first trial and reused for the rest.
+    cache = None
+    if cfg_dict["data"].get("use_feature_cache", True):
+        from src.features.cache import FeatureCache
+        cache = FeatureCache(cache_dir, extractor, preprocessor)
+
+    X_train, y_train = extract_split(train_df, preprocessor, extractor, label_encoder, cache=cache)
+    X_val, y_val     = extract_split(val_df,   preprocessor, extractor, label_encoder, cache=cache)
 
     model = build_sklearn_pipeline(cfg)
     model.fit(X_train, y_train)

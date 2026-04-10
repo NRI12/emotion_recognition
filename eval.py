@@ -51,7 +51,7 @@ _DL        = {"mlp", "cnn"}
 
 def _eval_classical(cfg: DictConfig, extractor: FeatureExtractor) -> dict:
     from joblib import load as jload
-    from src.data.dataset import AudioPreprocessor, load_dataframe, split_dataframe
+    from src.data.dataset import AudioPreprocessor, load_dataframe, get_or_create_splits
     from src.evaluation.metrics import compute_metrics
     from src.models.classical import extract_split
 
@@ -66,19 +66,14 @@ def _eval_classical(cfg: DictConfig, extractor: FeatureExtractor) -> dict:
         )
 
     print(f"Loading classical model: {pkl_path}")
-    artifact     = jload(pkl_path)
-    model        = artifact["model"]
+    artifact      = jload(pkl_path)
+    model         = artifact["model"]
     label_encoder = artifact["label_encoder"]
 
     preprocessor = AudioPreprocessor(cfg.preprocessing)
     df, _        = load_dataframe(cfg.data)
-    _, val_df, test_df = split_dataframe(
-        df,
-        train_ratio=cfg.data.train_ratio,
-        val_ratio=cfg.data.val_ratio,
-        stratify=cfg.data.stratify,
-        seed=cfg.seed,
-    )
+    cache_dir    = cfg.data.get("feature_cache_dir", "data/processed")
+    _, val_df, test_df = get_or_create_splits(df, cfg.data, cfg.seed, cache_dir=cache_dir)
 
     cache = None
     if cfg.data.get("use_feature_cache", True):

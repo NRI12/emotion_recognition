@@ -11,7 +11,7 @@ from src.data.dataset import (
     AudioPreprocessor,
     EmotionDataset,
     load_dataframe,
-    split_dataframe,
+    get_or_create_splits,
 )
 
 
@@ -49,19 +49,15 @@ class EmotionDataModule(pl.LightningDataModule):
         df, self.label_encoder = load_dataframe(self.cfg.data)
         self.num_classes = len(self.label_encoder.classes_)
 
-        train_df, val_df, test_df = split_dataframe(
-            df,
-            train_ratio=self.cfg.data.train_ratio,
-            val_ratio=self.cfg.data.val_ratio,
-            stratify=self.cfg.data.stratify,
-            seed=self.cfg.seed,
+        cache_dir = self.cfg.data.get("feature_cache_dir", "data/processed")
+        train_df, val_df, test_df = get_or_create_splits(
+            df, self.cfg.data, self.cfg.seed, cache_dir=cache_dir
         )
 
         # Feature cache: skip recomputation on repeated runs / across epochs.
         cache = None
         if self.cfg.data.get("use_feature_cache", True):
             from src.features.cache import FeatureCache
-            cache_dir = self.cfg.data.get("feature_cache_dir", "data/processed")
             cache = FeatureCache(cache_dir, self.feature_extractor, self.preprocessor)
             print(f"Feature cache: {cache.cache_dir}")
 

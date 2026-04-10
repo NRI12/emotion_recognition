@@ -6,7 +6,6 @@ SpecAugment is wired into the training DataLoader when augmentation is enabled.
 from __future__ import annotations
 
 import os
-import time
 from typing import Any, Dict, Optional
 
 import pytorch_lightning as pl
@@ -91,19 +90,38 @@ class DeepLearningPipeline(BasePipeline):
             accelerator="auto",
         )
 
-        t0 = time.time()
         trainer.fit(model, datamodule)
+        # train_time is measured by train.py around the entire pipeline.run() call.
 
-        # Capture val metrics from the last validation pass (before best-ckpt restore).
-        # callback_metrics are overwritten by trainer.test(), so read them here.
-        val_acc = float(trainer.callback_metrics.get("val/acc", 0.0) or 0.0)
-        val_f1  = float(trainer.callback_metrics.get("val/f1",  0.0) or 0.0)
+        # Retrieve best checkpoint path from the ModelCheckpoint callback.
+        ckpt_callback = next(
+            c for c in trainer.callbacks
+            if isinstance(c, pl.callbacks.ModelCheckpoint)
+        )
+        best_ckpt = ckpt_callback.best_model_path
 
-        test_results = trainer.test(model, datamodule, ckpt_path="best")
-        train_time = time.time() - t0
+        # Evaluate val and test on the best checkpoint using fresh trainer instances.
+        # Using separate trainers avoids any residual state from the fit loop and
+        # ensures both metric sets come from the same (best) model weights.
+        _eval_kw = dict(
+            accelerator="auto",
+            logger=False,
+            enable_progress_bar=True,
+            enable_model_summary=False,
+        )
+        val_results  = pl.Trainer(**_eval_kw).validate(model, datamodule, ckpt_path=best_ckpt)
+        test_results = pl.Trainer(**_eval_kw).test(model, datamodule, ckpt_path=best_ckpt)
 
-        results: Dict[str, Any] = test_results[0] if test_results else {}
-        results["val/acc"]     = round(val_acc, 4)
-        results["val/f1"]      = round(val_f1,  4)
-        results["train_time"]  = train_time
-        return results
+        val_acc  = round(float(val_results[0].get("val/acc",   0.0)), 4) if val_results  else 0.0
+        val_f1   = round(float(val_results[0].get("val/f1",    0.0)), 4) if val_results  else 0.0
+        test_acc = round(float(test_results[0].get("test/acc", 0.0)), 4) if test_results else 0.0
+        test_f1  = round(float(test_results[0].get("test/f1",  0.0)), 4) if test_results else 0.0
+
+        print(f"val_acc={val_acc}  val_f1={val_f1}")
+        print(f"test_acc={test_acc}  test_f1={test_f1}")
+        return {
+            "val/acc":  val_acc,
+            "val/f1":   val_f1,
+            "test/acc": test_acc,
+            "test/f1":  test_f1,
+        }

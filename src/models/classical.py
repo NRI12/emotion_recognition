@@ -17,7 +17,7 @@ from sklearn.svm import SVC
 from tqdm import tqdm
 from omegaconf import DictConfig, OmegaConf
 
-from src.data.dataset import AudioPreprocessor, load_dataframe, split_dataframe
+from src.data.dataset import AudioPreprocessor, load_dataframe
 from src.features.extractor import FeatureExtractor
 
 # ---------------------------------------------------------------------------

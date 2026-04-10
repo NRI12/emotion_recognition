@@ -10,7 +10,7 @@ from typing import Any, Dict
 
 from omegaconf import DictConfig
 
-from src.data.dataset import AudioPreprocessor, load_dataframe, split_dataframe
+from src.data.dataset import AudioPreprocessor, load_dataframe, get_or_create_splits
 from src.evaluation.metrics import compute_metrics
 from src.features.extractor import FeatureExtractor
 from src.models.classical import build_sklearn_pipeline, extract_split, save_classical_model
@@ -25,23 +25,16 @@ class ClassicalPipeline(BasePipeline):
         preprocessor = AudioPreprocessor(cfg.preprocessing)
         df, label_encoder = load_dataframe(cfg.data)
 
-        train_df, val_df, test_df = split_dataframe(
-            df,
-            train_ratio=cfg.data.train_ratio,
-            val_ratio=cfg.data.val_ratio,
-            stratify=cfg.data.stratify,
-            seed=cfg.seed,
+        cache_dir = cfg.data.get("feature_cache_dir", "data/processed")
+        train_df, val_df, test_df = get_or_create_splits(
+            df, cfg.data, cfg.seed, cache_dir=cache_dir
         )
 
         # Feature cache — skip recomputation on subsequent runs
         cache = None
         if cfg.data.get("use_feature_cache", True):
             from src.features.cache import FeatureCache
-            cache = FeatureCache(
-                cfg.data.get("feature_cache_dir", "data/processed"),
-                self.extractor,
-                preprocessor,
-            )
+            cache = FeatureCache(cache_dir, self.extractor, preprocessor)
             print(f"Feature cache: {cache.cache_dir}")
 
         n_workers = int(cfg.training.get("extraction_workers", 1))
