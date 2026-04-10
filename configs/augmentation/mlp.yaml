@@ -1,0 +1,37 @@
+# Augmentation preset for MLP (flat MFCC features).
+# Spectrogram-level aug is meaningless on 1-D flat vectors — all disabled.
+# Waveform-level aug changes raw audio BEFORE MFCC extraction so the model
+# sees varied features; this is the only meaningful aug path for flat models.
+
+enabled: true
+
+# ── Spectrogram-level — disabled for flat features ────────────────────────
+spec_augment:
+  enabled: false
+
+gaussian_noise:
+  enabled: false
+
+time_shift:
+  enabled: false
+
+random_erasing:
+  enabled: false
+
+# ── Waveform-level — these bypass the feature cache ───────────────────────
+waveform_noise:
+  enabled: true
+  min_snr_db: 15.0    # moderate noise level
+  max_snr_db: 40.0
+  p: 0.5
+
+speed_perturbation:
+  enabled: true
+  min_rate: 0.9
+  max_rate: 1.1
+  p: 0.5
+
+pitch_shift:
+  enabled: false      # requires torchaudio pitch backend; enable if available
+  max_semitones: 2.0
+  p: 0.5

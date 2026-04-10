@@ -1,10 +1,56 @@
-# SpecAugment — applied to training samples only (temporal/2-D features).
+# Augmentation config — applied to training samples only.
 # Has no effect on flat features (classical ML / MLP).
-# Enable via: python train.py augmentation.enabled=true
+# Enable the top-level flag first, then toggle individual techniques.
+#
+# Usage:
+#   python train.py augmentation.enabled=true
+#   python train.py augmentation.enabled=true augmentation.time_shift.enabled=true
+
 enabled: false
 
+# ── Spectrogram-level (applied after feature cache load) ─────────────────────
+# These are fast: cached features are loaded, then augmented on-the-fly each
+# epoch so every epoch sees a different view.
+
 spec_augment:
-  freq_mask_param: 15   # max frequency mask size (bins)
-  time_mask_param: 35   # max time mask size (frames)
+  enabled: true           # frequency + time masking (Park et al. 2019)
+  freq_mask_param: 15     # max frequency-bin mask width
+  time_mask_param: 35     # max time-frame mask width
   n_freq_masks: 2
   n_time_masks: 2
+
+gaussian_noise:
+  enabled: true           # additive Gaussian noise on spectrogram values
+  std: 0.02               # noise std (relative to feature values)
+
+time_shift:
+  enabled: true           # cyclic shift along time axis
+  max_fraction: 0.1       # max shift = 10 % of total frames
+
+random_erasing:
+  enabled: false          # zero out a random rectangular patch (Cutout)
+  max_freq_fraction: 0.2  # max erased height as fraction of F
+  max_time_fraction: 0.2  # max erased width as fraction of T
+  p: 0.5                  # probability per sample
+
+# ── Waveform-level (bypass cache — slightly slower, richer diversity) ─────────
+# These modify the raw audio BEFORE feature extraction.
+# When any waveform aug is enabled the feature cache is bypassed for that sample,
+# so extraction runs on-the-fly each epoch. Keep disabled unless you have GPU/fast CPU.
+
+waveform_noise:
+  enabled: false          # additive white noise at a random SNR level
+  min_snr_db: 10.0        # noisiest level (lower = more noise)
+  max_snr_db: 40.0        # cleanest level
+  p: 0.5
+
+speed_perturbation:
+  enabled: false          # randomly stretch / compress speaking rate ±rate
+  min_rate: 0.9           # 10 % slower
+  max_rate: 1.1           # 10 % faster
+  p: 0.5
+
+pitch_shift:
+  enabled: false          # shift pitch ±semitones (requires torchaudio backend)
+  max_semitones: 2.0
+  p: 0.5

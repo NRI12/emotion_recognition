@@ -1,0 +1,43 @@
+# Augmentation preset for CNN (temporal 2-D features).
+# Spectrogram-level techniques are the primary tool here.
+# Waveform-level disabled by default to keep extraction fast (cache hits).
+
+enabled: true
+
+spec_augment:
+  enabled: true
+  freq_mask_param: 15
+  time_mask_param: 35
+  n_freq_masks: 2
+  n_time_masks: 2
+
+gaussian_noise:
+  enabled: true
+  std: 0.02
+
+time_shift:
+  enabled: true
+  max_fraction: 0.1
+
+random_erasing:
+  enabled: false
+  max_freq_fraction: 0.2
+  max_time_fraction: 0.2
+  p: 0.5
+
+waveform_noise:
+  enabled: false
+  min_snr_db: 10.0
+  max_snr_db: 40.0
+  p: 0.5
+
+speed_perturbation:
+  enabled: false
+  min_rate: 0.9
+  max_rate: 1.1
+  p: 0.5
+
+pitch_shift:
+  enabled: false
+  max_semitones: 2.0
+  p: 0.5

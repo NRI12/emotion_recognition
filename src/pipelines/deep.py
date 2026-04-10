@@ -31,13 +31,47 @@ class DeepLearningPipeline(BasePipeline):
     def run(self) -> Dict[str, Any]:
         cfg = self.cfg
 
-        # Build SpecAugment if enabled (CNN / temporal features only)
+        # Build augmentation pipeline when enabled.
+        #
+        # Temporal models (CNN / LSTM / BiLSTM):
+        #   → spectrogram-level aug (SpecAugment, GaussianNoise, TimeShift, …)
+        #     applied on-the-fly after cache load
+        #   → waveform-level aug (noise, speed, pitch) applied before extraction,
+        #     bypassing the feature cache
+        #
+        # Flat models (MLP):
+        #   → spectrogram-level aug is meaningless on 1-D vectors → skipped
+        #   → waveform-level aug IS meaningful: changes raw audio before MFCC
+        #     extraction so the model sees different features every epoch
+        #   → AugmentPipeline built with spec transforms disabled automatically
         augment = None
         aug_cfg = cfg.get("augmentation", None)
-        if aug_cfg and aug_cfg.get("enabled", False) and not self.extractor.is_flat:
-            from src.features.transforms import SpecAugment
-            augment = SpecAugment.from_cfg(aug_cfg.spec_augment)
-            print("SpecAugment enabled.")
+        if aug_cfg and aug_cfg.get("enabled", False):
+            _WAV_KEYS  = ("waveform_noise", "speed_perturbation", "pitch_shift")
+            _SPEC_KEYS = ("spec_augment", "gaussian_noise", "time_shift", "random_erasing")
+
+            wav_enabled  = [k for k in _WAV_KEYS  if aug_cfg.get(k, {}).get("enabled", False)]
+            spec_enabled = [k for k in _SPEC_KEYS if aug_cfg.get(k, {}).get("enabled", False)]
+
+            # For flat-feature models only waveform aug makes sense
+            if self.extractor.is_flat and not wav_enabled:
+                print("[aug] Flat features + no waveform aug enabled → skipping augmentation.")
+            else:
+                # Temporarily suppress spec transforms for flat-feature models
+                _aug_cfg = aug_cfg
+                if self.extractor.is_flat:
+                    from omegaconf import OmegaConf
+                    _aug_cfg = OmegaConf.merge(
+                        aug_cfg,
+                        {k: {"enabled": False} for k in _SPEC_KEYS},
+                    )
+                from src.features.transforms import AugmentPipeline
+                augment = AugmentPipeline.from_cfg(
+                    _aug_cfg, sample_rate=cfg.preprocessing.sample_rate
+                )
+                active_spec = spec_enabled if not self.extractor.is_flat else []
+                print(f"Augmentation enabled — spec: {active_spec or ['none']}  "
+                      f"waveform: {wav_enabled or ['none']}")
 
         datamodule = EmotionDataModule(cfg, self.extractor, augment=augment)
         datamodule.setup()

@@ -50,10 +50,15 @@ class ExperimentLogger:
         from src.evaluation.metrics import save_run_results
 
         # Build row with explicit, fixed keys so the CSV schema never shifts.
+        aug_enabled: bool = bool(
+            self.cfg.get("augmentation", {}) and
+            self.cfg.augmentation.get("enabled", False)
+        )
         row: Dict[str, Any] = {
             "pipeline_name":  self.cfg.get("pipeline_name", "default"),
             "model_type":     self.cfg.model.type,
             "feature_method": self.cfg.feature_extraction.method,
+            "augmented":      aug_enabled,
             "train_time_sec": round(train_time, 2),
             "val/acc":  results.get("val/acc",  ""),
             "val/f1":   results.get("val/f1",   ""),

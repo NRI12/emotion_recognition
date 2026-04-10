@@ -99,8 +99,22 @@ class EmotionDataset(Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         row = self.df.iloc[idx]
         label = int(self.label_encoder.transform([row["emotion"]])[0])
+
+        # Waveform augmentation requires extracting features on-the-fly
+        # (bypassing the cache) because the waveform is modified before extraction.
+        use_waveform_aug = (
+            self.training
+            and self.augment is not None
+            and getattr(self.augment, "has_waveform_aug", False)
+        )
+
         try:
-            if self._cache is not None:
+            if use_waveform_aug:
+                # Bypass cache: load waveform → augment → extract
+                waveform = self.preprocessor.load(row["path"])
+                waveform = self.augment.augment_waveform(waveform)
+                features = self.feature_extractor.extract(waveform)
+            elif self._cache is not None:
                 features = self._cache.get(row["path"])
             else:
                 waveform = self.preprocessor.load(row["path"])
@@ -115,8 +129,9 @@ class EmotionDataset(Dataset):
                 features = torch.zeros_like(self.feature_extractor.extract(waveform))
             except Exception:
                 features = torch.zeros(1)
-        # Augmentation applied on-the-fly (after cache load) — only during training
-        # and only for 2-D spectrograms (temporal mode, shape (C, F, T))
+
+        # Spectrogram augmentation applied on-the-fly after features are ready —
+        # only during training and only for 2-D tensors (C, F, T).
         if self.training and self.augment is not None and features.ndim == 3:
             features = self.augment(features)
         return features, label

@@ -14,6 +14,7 @@ RESULT_COLUMNS = [
     "pipeline_name",
     "model_type",
     "feature_method",
+    "augmented",
     "train_time_sec",
     "val/acc",
     "val/f1",
