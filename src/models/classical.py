@@ -90,18 +90,23 @@ def extract_split(
     )
     n = len(rows)
 
-    def _do_one(path: str, emotion: str) -> Tuple[np.ndarray, int]:
-        """Extract one sample (thread-safe, runs in worker thread)."""
-        if cache is not None:
-            feat = cache.get_numpy(path)
-        else:
-            waveform = preprocessor.load(path)
-            feat = extractor.extract(waveform).numpy()
-        label = int(label_encoder.transform([emotion])[0])
-        return feat, label
+    def _do_one(path: str, emotion: str) -> Tuple[Optional[np.ndarray], int]:
+        """Extract one sample (thread-safe). Returns (None, -1) on error."""
+        try:
+            if cache is not None:
+                feat = cache.get_numpy(path)
+            else:
+                waveform = preprocessor.load(path)
+                feat = extractor.extract(waveform).numpy()
+            label = int(label_encoder.transform([emotion])[0])
+            return feat, label
+        except Exception as exc:  # noqa: BLE001
+            tqdm.write(f"  [warn] skip {os.path.basename(path)}: {exc}")
+            return None, -1
 
-    features: List[Optional[np.ndarray]] = [None] * n
-    labels:   List[Optional[int]]        = [None] * n
+    # Sentinel lists — None entries are filtered out after collection.
+    feat_buf: List[Optional[np.ndarray]] = [None] * n
+    lbl_buf:  List[int]                  = [-1]   * n
 
     n_threads = min(max(n_workers, 1), n)
 
@@ -114,11 +119,11 @@ def extract_split(
                 }
                 for future in as_completed(future_to_idx):
                     idx = future_to_idx[future]
-                    features[idx], labels[idx] = future.result()
+                    feat_buf[idx], lbl_buf[idx] = future.result()
                     bar.update(1)
         else:
             for i, (path, emotion) in enumerate(rows):
-                features[i], labels[i] = _do_one(path, emotion)
+                feat_buf[i], lbl_buf[i] = _do_one(path, emotion)
                 bar.update(1)
                 if log_every > 0 and (i + 1) % log_every == 0:
                     elapsed = time.time() - t_start
@@ -127,10 +132,21 @@ def extract_split(
                         f"  ({(i + 1) / elapsed:.1f} samples/s)"
                     )
 
+    # Drop bad samples (load/extraction failures).
+    good = [(f, l) for f, l in zip(feat_buf, lbl_buf) if f is not None]
+    n_bad = n - len(good)
+    if n_bad:
+        print(f"  [warn] {n_bad} sample(s) skipped due to errors in [{split_name}]")
+
     elapsed = time.time() - t_start
-    rate = n / elapsed if elapsed > 0 else 0
-    print(f"  {split_name}: {n} samples in {elapsed:.1f}s  ({rate:.1f} samples/s)")
-    return np.array(features), np.array(labels)
+    rate = len(good) / elapsed if elapsed > 0 else 0
+    print(f"  {split_name}: {len(good)}/{n} samples in {elapsed:.1f}s  ({rate:.1f} samples/s)")
+
+    if not good:
+        raise RuntimeError(f"All samples failed to load in split '{split_name}'.")
+
+    features_ok, labels_ok = zip(*good)
+    return np.array(features_ok), np.array(labels_ok)
 
 
 # ---------------------------------------------------------------------------

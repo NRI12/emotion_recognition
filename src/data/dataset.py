@@ -99,11 +99,22 @@ class EmotionDataset(Dataset):
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, int]:
         row = self.df.iloc[idx]
         label = int(self.label_encoder.transform([row["emotion"]])[0])
-        if self._cache is not None:
-            features = self._cache.get(row["path"])
-        else:
-            waveform = self.preprocessor.load(row["path"])
-            features = self.feature_extractor.extract(waveform)
+        try:
+            if self._cache is not None:
+                features = self._cache.get(row["path"])
+            else:
+                waveform = self.preprocessor.load(row["path"])
+                features = self.feature_extractor.extract(waveform)
+        except Exception as exc:  # noqa: BLE001
+            # Corrupt / missing audio — return a zero tensor so the DataLoader
+            # batch stays intact.  One bad sample has negligible impact on training.
+            print(f"[warn] zero-pad bad sample [{idx}] {row['path']}: {exc}")
+            ref = self.df.iloc[0]
+            try:
+                waveform = self.preprocessor.load(ref["path"])
+                features = torch.zeros_like(self.feature_extractor.extract(waveform))
+            except Exception:
+                features = torch.zeros(1)
         # Augmentation applied on-the-fly (after cache load) — only during training
         # and only for 2-D spectrograms (temporal mode, shape (C, F, T))
         if self.training and self.augment is not None and features.ndim == 3:

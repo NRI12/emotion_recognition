@@ -1,0 +1,26 @@
+# WavLM self-supervised embeddings
+# Requires: pip install transformers
+#
+# model_name : any HuggingFace WavLM model ID
+#   microsoft/wavlm-base        (12 layers, hidden_size=768)
+#   microsoft/wavlm-base-plus   (12 layers, hidden_size=768, more data)
+#   microsoft/wavlm-large       (24 layers, hidden_size=1024)
+#
+# layer : which transformer layer to extract from
+#   -1  → last_hidden_state (recommended; fastest)
+#    0  → embedding output
+#    1..N → specific transformer layer output
+#
+# output_mode : flat  → (2 * hidden_size,)  for classical ML / MLP
+#               temporal → (1, hidden_size, T) for CNN
+#
+# device : "cpu" | "cuda" | "cuda:0" etc.
+#   Use "cuda" to speed up extraction significantly on GPU machines.
+
+method: wavlm
+model_name: "microsoft/wavlm-base"
+hidden_size: 768
+layer: -1
+output_mode: flat
+normalize: none
+device: "cpu"

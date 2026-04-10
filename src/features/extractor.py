@@ -11,8 +11,18 @@ Design decisions vs the old librosa extractor:
   - normalize auto-selects:
       flat     → 'none'       (sklearn StandardScaler handles cross-sample norm)
       temporal → 'per_sample' (instance norm per channel, zero-mean unit-var)
+
+SSL methods (hubert, wavlm):
+  - Uses HuggingFace transformers; models are downloaded on first use.
+  - Input is resampled to 16 kHz internally (models' native rate).
+  - Output shape: (1, hidden_size, T)  — matches (C, F, T) convention.
+  - flat mode aggregates over T via mean + std → (2 * hidden_size,).
+  - Delta / delta-delta are not applied to SSL embeddings.
+  - Model loading is lazy and thread-safe (one load per extractor instance).
 """
 from __future__ import annotations
+
+import threading
 
 import torch
 import torchaudio
@@ -30,17 +40,22 @@ class FeatureExtractor:
     melspec           Mel spectrogram (dB scale), temporal (CNN-ready)
     chroma            Chroma features (librosa fallback), flat
     spectral_contrast Spectral contrast (librosa fallback), flat
+    hubert            HuBERT embeddings (HuggingFace), flat or temporal
+    wavlm             WavLM embeddings (HuggingFace), flat or temporal
     """
 
     FLAT_METHODS = {"mfcc", "chroma", "spectral_contrast"}
     SPEC_METHODS = {"logmel", "melspec"}
+    SSL_METHODS  = {"hubert", "wavlm"}
 
     def __init__(self, feat_cfg: DictConfig, prep_cfg: DictConfig) -> None:
         self.cfg = feat_cfg
         self.method: str = feat_cfg.method
         self.sample_rate: int = prep_cfg.sample_rate
-        self.use_delta: bool = feat_cfg.get("use_delta", False)
-        self.use_delta_delta: bool = feat_cfg.get("use_delta_delta", False)
+
+        # Delta / ΔΔ not applicable to SSL embeddings
+        self.use_delta: bool = feat_cfg.get("use_delta", False) if self.method not in self.SSL_METHODS else False
+        self.use_delta_delta: bool = feat_cfg.get("use_delta_delta", False) if self.method not in self.SSL_METHODS else False
 
         # output_mode: auto-detect from method if not explicitly set
         _default_mode = "flat" if self.method in self.FLAT_METHODS else "temporal"
@@ -69,13 +84,13 @@ class FeatureExtractor:
 
         features = self._transform(waveform)  # (1, F, T)
 
-        # Log compression / dB scaling
+        # Log compression / dB scaling (spectral methods only)
         if self.method == "logmel":
             features = torch.log(features + 1e-9)
         elif self.method == "melspec":
             features = 10.0 * torch.log10(features.clamp(min=1e-10))
 
-        # Expand channel dimension with delta / delta-delta
+        # Expand channel dimension with delta / delta-delta (not for SSL)
         if self.use_delta:
             delta = AF.compute_deltas(features)           # (1, F, T)
             if self.use_delta_delta:
@@ -108,6 +123,8 @@ class FeatureExtractor:
             return 12 * 2          # 12 chroma bins; delta not supported for librosa methods
         elif self.method == "spectral_contrast":
             return 7 * 2           # 7 sub-bands
+        elif self.method in self.SSL_METHODS:
+            return self.cfg.hidden_size * 2  # mean + std over time axis
         raise ValueError(f"Unknown method: {self.method!r}")
 
     def get_output_channels(self) -> int:
@@ -149,6 +166,14 @@ class FeatureExtractor:
             return _LibrosaTransform("chroma", self.sample_rate, n_fft, hop_length)
         elif self.method == "spectral_contrast":
             return _LibrosaTransform("spectral_contrast", self.sample_rate, n_fft, hop_length)
+        elif self.method in self.SSL_METHODS:
+            return _SSLTransform(
+                method=self.method,
+                model_name=self.cfg.model_name,
+                layer=self.cfg.get("layer", -1),
+                input_sr=self.sample_rate,
+                device=self.cfg.get("device", "cpu"),
+            )
         raise ValueError(f"Unknown feature method: {self.method!r}")
 
 
@@ -195,3 +220,101 @@ class _LibrosaTransform:
                 y=wav, sr=self._sr, n_fft=self._n_fft, hop_length=self._hop_length
             )
         return torch.tensor(feat, dtype=torch.float32).unsqueeze(0)  # (1, F, T)
+
+
+class _SSLTransform:
+    """HuBERT / WavLM feature extractor via HuggingFace transformers.
+
+    Resamples input to 16 kHz (models' native rate) if needed.
+    Returns (1, hidden_size, T) — compatible with the (C, F, T) convention.
+
+    Model and processor are loaded lazily on the first call and cached on the
+    instance, so each FeatureExtractor pays the loading cost only once.
+    Thread-safe: a lock guards the lazy-load critical section.
+
+    Parameters
+    ----------
+    method     : "hubert" or "wavlm"
+    model_name : HuggingFace model ID, e.g. "facebook/hubert-base-ls960"
+    layer      : transformer layer index to extract from.
+                 -1 → last_hidden_state (fastest, no all-layer storage).
+                 0 → embedding output, 1..N → transformer layer outputs.
+    input_sr   : sample rate of the incoming waveform (from AudioPreprocessor)
+    device     : torch device string, e.g. "cpu" or "cuda"
+    """
+
+    TARGET_SR = 16_000
+
+    def __init__(
+        self,
+        method: str,
+        model_name: str,
+        layer: int,
+        input_sr: int,
+        device: str = "cpu",
+    ) -> None:
+        self._method = method
+        self._model_name = model_name
+        self._layer = layer
+        self._device = device
+        self._resampler = (
+            torchaudio.transforms.Resample(input_sr, self.TARGET_SR)
+            if input_sr != self.TARGET_SR
+            else None
+        )
+        self._processor = None
+        self._model = None
+        self._lock = threading.Lock()
+
+    # ------------------------------------------------------------------
+    # Lazy loading (thread-safe double-checked locking)
+    # ------------------------------------------------------------------
+
+    def _load(self) -> None:
+        if self._model is not None:
+            return
+        with self._lock:
+            if self._model is not None:
+                return
+            from transformers import AutoFeatureExtractor, AutoModel
+            self._processor = AutoFeatureExtractor.from_pretrained(self._model_name)
+            self._model = AutoModel.from_pretrained(self._model_name).to(self._device)
+            self._model.eval()
+
+    # ------------------------------------------------------------------
+    # Forward pass
+    # ------------------------------------------------------------------
+
+    def __call__(self, waveform: torch.Tensor) -> torch.Tensor:
+        """Extract SSL embeddings from a (1, N) waveform tensor.
+
+        Returns
+        -------
+        torch.Tensor of shape (1, hidden_size, T) on CPU.
+        """
+        self._load()
+
+        if self._resampler is not None:
+            waveform = self._resampler(waveform)
+
+        wav_np = waveform.squeeze(0).numpy()  # (N,)
+
+        inputs = self._processor(
+            wav_np,
+            sampling_rate=self.TARGET_SR,
+            return_tensors="pt",
+            padding=False,
+        )
+        inputs = {k: v.to(self._device) for k, v in inputs.items()}
+
+        need_all = self._layer != -1
+        with torch.no_grad():
+            outputs = self._model(**inputs, output_hidden_states=need_all)
+
+        if self._layer == -1:
+            hidden = outputs.last_hidden_state   # (1, T, H)
+        else:
+            hidden = outputs.hidden_states[self._layer]  # (1, T, H)
+
+        # (1, T, H) → (1, H, T) to match (C, F, T) convention
+        return hidden.squeeze(0).T.unsqueeze(0).cpu()  # (1, H, T)

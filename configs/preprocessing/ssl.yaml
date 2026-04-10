@@ -1,0 +1,9 @@
+# Preprocessing for SSL models (HuBERT, WavLM).
+# These models expect 16 kHz input; the _SSLTransform resamples internally,
+# but setting 16000 here avoids a redundant resample step and reduces I/O.
+# normalize: false — the HuggingFace AutoFeatureExtractor applies its own
+# zero-mean unit-variance normalisation that the models were trained with.
+
+sample_rate: 16000
+duration: 3.0
+normalize: false
